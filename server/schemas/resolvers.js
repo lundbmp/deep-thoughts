@@ -1,8 +1,21 @@
 const { User, Thought } = require("../models");
-const { authenticationError } = require("apollo-server-express");
+const { signToken } = require("../utils/auth");
+const { AuthenticationError } = require("apollo-server-express");
 
 const resolvers = {
   Query: {
+    me: async (parent, args, context) => {
+      if (context.user) {
+        const userData = await User.findOne({})
+          .select("-__v -password")
+          .populate("thoughts")
+          .populate("friends");
+
+        return userData;
+      }
+
+      throw new AuthenticationError("Not logged in");
+    },
     thoughts: async (parent, { username }) => {
       const params = username ? { username } : {};
       return Thought.find(params).sort({ createdAt: -1 });
@@ -28,8 +41,9 @@ const resolvers = {
   Mutation: {
     addUser: async (parent, args) => {
       const user = await User.create(args);
+      const token = signToken(user);
 
-      return user;
+      return { token, user };
     },
     login: async (parent, { email, password }) => {
       const user = await User.findOne({ email });
@@ -44,7 +58,9 @@ const resolvers = {
         throw new authenticationError("incorrect credentials");
       }
 
-      return user;
+      const token = signToken(user);
+
+      return { token, user };
     },
   },
 };
